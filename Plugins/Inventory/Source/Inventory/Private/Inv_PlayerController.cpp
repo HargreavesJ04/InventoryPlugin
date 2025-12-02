@@ -1,9 +1,26 @@
 #include "Inv_PlayerController.h"
 
-#include "D:/UE_5.5/Engine/Plugins/EnhancedInput/Source/EnhancedInput/Public/EnhancedInputSubsystems.h"
-#include "D:/UE_5.5/Engine/Plugins/EnhancedInput/Source/EnhancedInput/Public/EnhancedInputComponent.h"
+#include "Blueprint/UserWidget.h"
+#include "Kismet/GameplayStatics.h"
+
+#include "Widgets/HUD/Inv_HUDWidget.h" 
+
+//#include "D:/UE_5.5/Engine/Plugins/EnhancedInput/Source/EnhancedInput/Public/EnhancedInputSubsystems.h"
+//#include "D:/UE_5.5/Engine/Plugins/EnhancedInput/Source/EnhancedInput/Public/EnhancedInputComponent.h"
 
 
+AInv_PlayerController::AInv_PlayerController()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	TraceLength = 500.0;
+}
+
+void AInv_PlayerController::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	
+	TraceForItem();
+}
 
 void AInv_PlayerController::BeginPlay()
 {
@@ -15,7 +32,7 @@ void AInv_PlayerController::BeginPlay()
 	{
 		Subsystem->AddMappingContext(DefaultMC, 0);
 	}
-
+    CreateHubWidget();
 }
 
 void AInv_PlayerController::SetupInputComponent()
@@ -31,3 +48,47 @@ void AInv_PlayerController::PrimaryInteract()
 {
 	UE_LOG(LogTemp, Log, TEXT("Howdy!"))
 }
+
+void AInv_PlayerController::CreateHubWidget()
+{
+	if (!IsLocalController()) return; 
+	HUDWidget = CreateWidget<UInv_HUDWidget>(this, HUDWidgetClass);
+	if (IsValid(HUDWidget))
+	{
+		HUDWidget->AddToViewport(); 
+	}
+}
+
+void AInv_PlayerController::TraceForItem()
+{
+	if (!IsValid(GEngine) || !IsValid(GEngine->GameViewport)) return; 
+	FVector2D ViewportSize;
+	GEngine->GameViewport->GetViewportSize(ViewportSize);
+	const FVector2D ViewportCenter = ViewportSize / 2.f; 
+	FVector TraceStart;
+	FVector Forward;
+	
+	if (!UGameplayStatics::DeprojectScreenToWorld(this, ViewportCenter, TraceStart, Forward )) return;
+	{
+		const FVector TraceEnd = TraceStart + Forward * TraceLength ; 
+		FHitResult Hit;
+		GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd,ItemTraceChannel );
+		
+		LastActor = ThisActor;
+		ThisActor = Hit.GetActor();
+		
+		if (ThisActor == LastActor) return; 
+		
+		if (ThisActor.IsValid())
+		
+			UE_LOG(LogTemp, Warning, TEXT ("NEW ACTOR")); 
+		
+		}
+		
+		if (LastActor.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT ("LAST ACTOR")); 
+			
+		}
+	}
+}; 
