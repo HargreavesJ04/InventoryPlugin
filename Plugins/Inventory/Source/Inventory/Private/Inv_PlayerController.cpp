@@ -1,8 +1,8 @@
 #include "Inv_PlayerController.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Items/Components/Inv_ItemComponent.h"
 #include "Kismet/GameplayStatics.h"
-
 #include "Widgets/HUD/Inv_HUDWidget.h" 
 
 //#include "D:/UE_5.5/Engine/Plugins/EnhancedInput/Source/EnhancedInput/Public/EnhancedInputSubsystems.h"
@@ -13,6 +13,7 @@ AInv_PlayerController::AInv_PlayerController()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	TraceLength = 500.0;
+	ItemTraceChannel = ECollisionChannel::ECC_GameTraceChannel1;
 }
 
 void AInv_PlayerController::Tick(float DeltaTime)
@@ -77,13 +78,24 @@ void AInv_PlayerController::TraceForItem()
 		LastActor = ThisActor;
 		ThisActor = Hit.GetActor();
 		
+		if (!ThisActor.IsValid())
+		{
+			if (IsValid(HUDWidget)) HUDWidget->HidepickupMessage();
+		}
+		
 		if (ThisActor == LastActor) return; 
 		
 		if (ThisActor.IsValid())
-		
-			UE_LOG(LogTemp, Warning, TEXT ("NEW ACTOR")); 
-		
+		{
+			UInv_ItemComponent* ItemComponent = ThisActor->FindComponentByClass<UInv_ItemComponent>();
+
+			if (!IsValid(ItemComponent)) return;
+			
+			
+			if (IsValid(HUDWidget)) HUDWidget->ShowpickupMessage(ItemComponent->GetPickupMessage()); 
 		}
+		
+	}
 		
 		if (LastActor.IsValid())
 		{
@@ -91,4 +103,4 @@ void AInv_PlayerController::TraceForItem()
 			
 		}
 	}
-}; 
+ 
