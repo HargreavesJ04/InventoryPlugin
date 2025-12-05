@@ -23,6 +23,12 @@ void AInv_PlayerController::Tick(float DeltaTime)
 	TraceForItem();
 }
 
+void AInv_PlayerController::ToggleInventory()
+{
+	if (!InventoryComponent.IsValid()) return;
+	InventoryComponent->ToggleInventoryMenu();
+}
+
 void AInv_PlayerController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -33,6 +39,9 @@ void AInv_PlayerController::BeginPlay()
 	{
 		Subsystem->AddMappingContext(DefaultMC, 0);
 	}
+	
+	InventoryComponent = FindComponentByClass<UInv_InventoryComponent>();
+	
     CreateHubWidget();
 }
 
@@ -43,6 +52,7 @@ void AInv_PlayerController::SetupInputComponent()
 	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent);
 
 	EnhancedInputComponent->BindAction(PrimaryInteractAction, ETriggerEvent::Started, this, &AInv_PlayerController::PrimaryInteract);
+	EnhancedInputComponent->BindAction(ToggleInventorytAction, ETriggerEvent::Started, this, &AInv_PlayerController::ToggleInventory);
 }
 
 void AInv_PlayerController::PrimaryInteract()

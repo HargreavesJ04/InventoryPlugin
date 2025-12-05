@@ -17,6 +17,7 @@ public:
 	
 	UInv_InventoryComponent();
 	
+	void ToggleInventoryMenu();
 
 protected:
 	
@@ -24,7 +25,9 @@ protected:
 
 private:
 
-
+    bool bInventoryEnabled;
+	void OpenInventoryMenu();
+	void CloseInventoryMenu();
 	
    TWeakObjectPtr<APlayerController> OwningController;
 	
