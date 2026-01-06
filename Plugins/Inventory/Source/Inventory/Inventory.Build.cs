@@ -26,8 +26,10 @@ public class Inventory : ModuleRules
 			new string[]
 			{
 				"Core",
-				"NetCore" //to use fast array Serializer.h
- 				// ... add other public dependencies that you statically link with here ...
+				"NetCore",
+				"StructUtils",
+				"GameplayTags"
+				// ... add other public dependencies that you statically link with here ...
 			}
 			);
 			
@@ -39,8 +41,9 @@ public class Inventory : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore", 
-				"EnhancedInput",
-				"UMG"
+				"EnhancedInput", 
+				"UMG",
+				"InputCore"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
