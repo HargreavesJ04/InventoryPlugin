@@ -1,6 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
@@ -14,7 +12,6 @@ class UInv_InventoryBase;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FInventoryItemChange, UInv_InventoryItem*, Item);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNoRoomInInventory);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStackChange, const FInv_SlotAvailabilityResult&, Result);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FItemEquipStatusChanged, UInv_InventoryItem*, Item);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FInventoryMenuToggled, bool, bOpen);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), Blueprintable)
@@ -41,32 +38,25 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_ConsumeItem(UInv_InventoryItem* Item);
 
-	UFUNCTION(Server, Reliable)
-	void Server_EquipSlotClicked(UInv_InventoryItem* ItemToEquip, UInv_InventoryItem* ItemToUnequip);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_EquipSlotClicked(UInv_InventoryItem* ItemToEquip, UInv_InventoryItem* ItemToUnequip);
-
 	void ToggleInventoryMenu();
-	void AddRepSubObj(UObject* SubObj);
-	void SpawnDroppedItem(UInv_InventoryItem* Item, int32 StackCount);
-	UInv_InventoryBase* GetInventoryMenu() const { return InventoryMenu; }
 	bool IsMenuOpen() const { return bInventoryMenuOpen; }
+
+	// Essential helpers for networking and UI
+	void AddRepSubObj(UObject* SubObj);
+	UInv_InventoryBase* GetInventoryMenu() const { return InventoryMenu; }
+	void SpawnDroppedItem(UInv_InventoryItem* Item, int32 StackCount);
 
 	FInventoryItemChange OnItemAdded;
 	FInventoryItemChange OnItemRemoved;
 	FNoRoomInInventory NoRoomInInventory;
 	FStackChange OnStackChange;
-	FItemEquipStatusChanged OnItemEquipped;
-	FItemEquipStatusChanged OnItemUnequipped;
 	FInventoryMenuToggled OnInventoryMenuToggled;
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
-
 	TWeakObjectPtr<APlayerController> OwningController;
-	
 	void ConstructInventory();
 
 	UPROPERTY(Replicated)
@@ -84,16 +74,12 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Inventory")
 	float DropSpawnAngleMin = -85.f;
-
 	UPROPERTY(EditAnywhere, Category = "Inventory")
 	float DropSpawnAngleMax = 85.f;
-
 	UPROPERTY(EditAnywhere, Category = "Inventory")
 	float DropSpawnDistanceMin = 10.f;
-
 	UPROPERTY(EditAnywhere, Category = "Inventory")
 	float DropSpawnDistanceMax = 50.f;
-
 	UPROPERTY(EditAnywhere, Category = "Inventory")
 	float RelativeSpawnElevation = 70.f;
 };
