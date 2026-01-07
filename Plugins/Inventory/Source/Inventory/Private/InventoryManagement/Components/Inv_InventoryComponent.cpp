@@ -5,158 +5,186 @@
 #include "Items/Inv_InventoryItem.h"
 #include "Items/Fragments/Inv_ItemFragment.h"
 #include "GameFramework/Pawn.h"
+#include "Engine/Engine.h" // Added for Debug Messages
 
 UInv_InventoryComponent::UInv_InventoryComponent() : InventoryList(this)
 {
-	PrimaryComponentTick.bCanEverTick = false;
-	SetIsReplicatedByDefault(true);
-	bReplicateUsingRegisteredSubObjectList = true;
-	bInventoryMenuOpen = false;
+    PrimaryComponentTick.bCanEverTick = false;
+    SetIsReplicatedByDefault(true);
+    bReplicateUsingRegisteredSubObjectList = true;
+    bInventoryMenuOpen = false;
 }
 
 void UInv_InventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ThisClass, InventoryList);
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ThisClass, InventoryList);
 }
 
 void UInv_InventoryComponent::TryAddItem(UInv_ItemComponent* ItemComponent)
 {
-	if (!IsValid(InventoryMenu)) return;
+    // SAFETY CHECK: Is the menu valid?
+    if (!IsValid(InventoryMenu))
+    {
+       if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("TryAddItem Failed: InventoryMenu is NULL!"));
+       return;
+    }
 
-	FInv_SlotAvailabilityResult Result = InventoryMenu->HasRoomForItem(ItemComponent);
-	UInv_InventoryItem* FoundItem = InventoryList.FindFirstItemByType(ItemComponent->GetItemManifest().GetItemType());
-	Result.Item = FoundItem;
+    FInv_SlotAvailabilityResult Result = InventoryMenu->HasRoomForItem(ItemComponent);
+    UInv_InventoryItem* FoundItem = InventoryList.FindFirstItemByType(ItemComponent->GetItemManifest().GetItemType());
+    Result.Item = FoundItem;
 
-	if (Result.TotalRoomToFill == 0)
-	{
-		NoRoomInInventory.Broadcast();
-		return;
-	}
-	
-	if (Result.Item.IsValid() && Result.bStackable)
-	{
-		OnStackChange.Broadcast(Result);
-		Server_AddStacksToItem(ItemComponent, Result.TotalRoomToFill, Result.Remainder);
-	}
-	else if (Result.TotalRoomToFill > 0)
-	{
-		Server_AddNewItem(ItemComponent, Result.bStackable ? Result.TotalRoomToFill : 0, Result.Remainder);
-	}
+    if (Result.TotalRoomToFill == 0)
+    {
+       NoRoomInInventory.Broadcast();
+       return;
+    }
+    
+    if (Result.Item.IsValid() && Result.bStackable)
+    {
+       OnStackChange.Broadcast(Result);
+       Server_AddStacksToItem(ItemComponent, Result.TotalRoomToFill, Result.Remainder);
+    }
+    else if (Result.TotalRoomToFill > 0)
+    {
+       Server_AddNewItem(ItemComponent, Result.bStackable ? Result.TotalRoomToFill : 0, Result.Remainder);
+    }
 }
 
 void UInv_InventoryComponent::Server_AddNewItem_Implementation(UInv_ItemComponent* ItemComponent, int32 StackCount, int32 Remainder)
 {
-	UInv_InventoryItem* NewItem = InventoryList.AddEntry(ItemComponent);
-	NewItem->SetTotalStackCount(StackCount);
-	if (GetOwner()->GetNetMode() == NM_ListenServer || GetOwner()->GetNetMode() == NM_Standalone)
-	{
-		OnItemAdded.Broadcast(NewItem);
-	}
-	if (Remainder == 0) ItemComponent->PickedUp();
-	else if (FInv_StackableFragment* Frag = ItemComponent->GetItemManifestMutable().GetFragmentOfTypeMutable<FInv_StackableFragment>())
-	{
-		Frag->SetStackCount(Remainder);
-	}
+    UInv_InventoryItem* NewItem = InventoryList.AddEntry(ItemComponent);
+    NewItem->SetTotalStackCount(StackCount);
+    if (GetOwner()->GetNetMode() == NM_ListenServer || GetOwner()->GetNetMode() == NM_Standalone)
+    {
+       OnItemAdded.Broadcast(NewItem);
+    }
+    if (Remainder == 0) ItemComponent->PickedUp();
+    else if (FInv_StackableFragment* Frag = ItemComponent->GetItemManifestMutable().GetFragmentOfTypeMutable<FInv_StackableFragment>())
+    {
+       Frag->SetStackCount(Remainder);
+    }
 }
 
 void UInv_InventoryComponent::Server_AddStacksToItem_Implementation(UInv_ItemComponent* ItemComponent, int32 StackCount, int32 Remainder)
 {
-	UInv_InventoryItem* Item = InventoryList.FindFirstItemByType(ItemComponent->GetItemManifest().GetItemType());
-	if (IsValid(Item))
-	{
-		Item->SetTotalStackCount(Item->GetTotalStackCount() + StackCount);
-		if (Remainder == 0) ItemComponent->PickedUp();
-		else if (FInv_StackableFragment* Frag = ItemComponent->GetItemManifestMutable().GetFragmentOfTypeMutable<FInv_StackableFragment>())
-		{
-			Frag->SetStackCount(Remainder);
-		}
-	}
+    UInv_InventoryItem* Item = InventoryList.FindFirstItemByType(ItemComponent->GetItemManifest().GetItemType());
+    if (IsValid(Item))
+    {
+       Item->SetTotalStackCount(Item->GetTotalStackCount() + StackCount);
+       if (Remainder == 0) ItemComponent->PickedUp();
+       else if (FInv_StackableFragment* Frag = ItemComponent->GetItemManifestMutable().GetFragmentOfTypeMutable<FInv_StackableFragment>())
+       {
+          Frag->SetStackCount(Remainder);
+       }
+    }
 }
 
 void UInv_InventoryComponent::Server_DropItem_Implementation(UInv_InventoryItem* Item, int32 StackCount)
 {
-	const int32 NewStackCount = Item->GetTotalStackCount() - StackCount;
-	if (NewStackCount <= 0) InventoryList.RemoveEntry(Item);
-	else Item->SetTotalStackCount(NewStackCount);
+    const int32 NewStackCount = Item->GetTotalStackCount() - StackCount;
+    if (NewStackCount <= 0) InventoryList.RemoveEntry(Item);
+    else Item->SetTotalStackCount(NewStackCount);
 
-	SpawnDroppedItem(Item, StackCount);
+    SpawnDroppedItem(Item, StackCount);
 }
 
 void UInv_InventoryComponent::SpawnDroppedItem(UInv_InventoryItem* Item, int32 StackCount)
 {
-	const APawn* OwningPawn = OwningController->GetPawn();
-	FVector RotatedForward = OwningPawn->GetActorForwardVector().RotateAngleAxis(FMath::FRandRange(DropSpawnAngleMin, DropSpawnAngleMax), FVector::UpVector);
-	FVector SpawnLocation = OwningPawn->GetActorLocation() + RotatedForward * FMath::FRandRange(DropSpawnDistanceMin, DropSpawnDistanceMax);
-	SpawnLocation.Z -= RelativeSpawnElevation;
-	
-	FInv_ItemManifest& ItemManifest = Item->GetItemManifestMutable();
-	if (FInv_StackableFragment* Frag = ItemManifest.GetFragmentOfTypeMutable<FInv_StackableFragment>())
-	{
-		Frag->SetStackCount(StackCount);
-	}
-	ItemManifest.SpawnPickupActor(this, SpawnLocation, FRotator::ZeroRotator);
+    const APawn* OwningPawn = OwningController->GetPawn();
+    FVector RotatedForward = OwningPawn->GetActorForwardVector().RotateAngleAxis(FMath::FRandRange(DropSpawnAngleMin, DropSpawnAngleMax), FVector::UpVector);
+    FVector SpawnLocation = OwningPawn->GetActorLocation() + RotatedForward * FMath::FRandRange(DropSpawnDistanceMin, DropSpawnDistanceMax);
+    SpawnLocation.Z -= RelativeSpawnElevation;
+    
+    FInv_ItemManifest& ItemManifest = Item->GetItemManifestMutable();
+    if (FInv_StackableFragment* Frag = ItemManifest.GetFragmentOfTypeMutable<FInv_StackableFragment>())
+    {
+       Frag->SetStackCount(StackCount);
+    }
+    ItemManifest.SpawnPickupActor(this, SpawnLocation, FRotator::ZeroRotator);
 }
 
 void UInv_InventoryComponent::Server_ConsumeItem_Implementation(UInv_InventoryItem* Item)
 {
-	const int32 NewStackCount = Item->GetTotalStackCount() - 1;
-	if (NewStackCount <= 0) InventoryList.RemoveEntry(Item);
-	else Item->SetTotalStackCount(NewStackCount);
+    const int32 NewStackCount = Item->GetTotalStackCount() - 1;
+    if (NewStackCount <= 0) InventoryList.RemoveEntry(Item);
+    else Item->SetTotalStackCount(NewStackCount);
 
-	if (FInv_ConsumableFragment* Frag = Item->GetItemManifestMutable().GetFragmentOfTypeMutable<FInv_ConsumableFragment>())
-	{
-		Frag->OnConsume(OwningController.Get());
-	}
+    if (FInv_ConsumableFragment* Frag = Item->GetItemManifestMutable().GetFragmentOfTypeMutable<FInv_ConsumableFragment>())
+    {
+       Frag->OnConsume(OwningController.Get());
+    }
 }
 
 void UInv_InventoryComponent::ToggleInventoryMenu()
 {
-	bInventoryMenuOpen ? CloseInventoryMenu() : OpenInventoryMenu();
-	OnInventoryMenuToggled.Broadcast(bInventoryMenuOpen);
+    // SAFETY CHECK: Is the menu valid?
+    if (!IsValid(InventoryMenu))
+    {
+       if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Toggle Failed: InventoryMenu is NULL!"));
+       return;
+    }
+
+    bInventoryMenuOpen ? CloseInventoryMenu() : OpenInventoryMenu();
+    OnInventoryMenuToggled.Broadcast(bInventoryMenuOpen);
 }
 
 void UInv_InventoryComponent::AddRepSubObj(UObject* SubObj)
 {
-	if (IsUsingRegisteredSubObjectList() && IsReadyForReplication() && IsValid(SubObj))
-	{
-		AddReplicatedSubObject(SubObj);
-	}
+    if (IsUsingRegisteredSubObjectList() && IsReadyForReplication() && IsValid(SubObj))
+    {
+       AddReplicatedSubObject(SubObj);
+    }
 }
 
 void UInv_InventoryComponent::BeginPlay()
 {
-	Super::BeginPlay();
-	ConstructInventory();
+    Super::BeginPlay();
+    ConstructInventory();
 }
 
 void UInv_InventoryComponent::ConstructInventory()
 {
-	OwningController = Cast<APlayerController>(GetOwner());
-	if (OwningController.IsValid() && OwningController->IsLocalController())
-	{
-		InventoryMenu = CreateWidget<UInv_InventoryBase>(OwningController.Get(), InventoryMenuClass);
-		InventoryMenu->AddToViewport();
-		CloseInventoryMenu();
-	}
+    OwningController = Cast<APlayerController>(GetOwner());
+    if (OwningController.IsValid() && OwningController->IsLocalController())
+    {
+       // DEBUG: Check if class is assigned
+       if (!IsValid(InventoryMenuClass))
+       {
+           if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("CRITICAL ERROR: InventoryMenuClass is NONE in Character Blueprint!"));
+           return;
+       }
+
+       InventoryMenu = CreateWidget<UInv_InventoryBase>(OwningController.Get(), InventoryMenuClass);
+       
+       // DEBUG: Check if creation failed
+       if (!IsValid(InventoryMenu))
+       {
+           if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("CRITICAL ERROR: Failed to Create Inventory Widget! Check Blueprint for Errors!"));
+           return;
+       }
+
+       InventoryMenu->AddToViewport();
+       CloseInventoryMenu();
+    }
 }
 
 void UInv_InventoryComponent::OpenInventoryMenu()
 {
-	if (IsValid(InventoryMenu))
-	{
-		InventoryMenu->SetVisibility(ESlateVisibility::Visible);
-		bInventoryMenuOpen = true;
-		OwningController->SetShowMouseCursor(true);
-	}
+    if (IsValid(InventoryMenu))
+    {
+       InventoryMenu->SetVisibility(ESlateVisibility::Visible);
+       bInventoryMenuOpen = true;
+       OwningController->SetShowMouseCursor(true);
+    }
 }
 
 void UInv_InventoryComponent::CloseInventoryMenu()
 {
-	if (IsValid(InventoryMenu))
-	{
-		InventoryMenu->SetVisibility(ESlateVisibility::Collapsed);
-		bInventoryMenuOpen = false;
-		OwningController->SetShowMouseCursor(false);
-	}
+    if (IsValid(InventoryMenu))
+    {
+       InventoryMenu->SetVisibility(ESlateVisibility::Collapsed);
+       bInventoryMenuOpen = false;
+       OwningController->SetShowMouseCursor(false);
+    }
 }
